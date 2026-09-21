@@ -8,23 +8,25 @@ Kalau program ini membantu Anda, pertimbangkan memberi ⭐ pada repositori ini.
 
 ## Daftar Isi
 
-- [Memulai](#memulai)
-  - [Cara Kerja](#cara-kerja)
-  - [Prasyarat](#prasyarat)
-  - [Instalasi](#instalasi)
-  - [Konfigurasi](#konfigurasi)
-  - [Penggunaan](#penggunaan)
-- [Penjadwalan Otomatis](#penjadwalan-otomatis)
-  - [Task Scheduler (Windows)](#task-scheduler-windows)
-  - [GitHub Actions](#github-actions)
-- [Notifikasi Telegram](#notifikasi-telegram)
-- [Informasi Proyek](#informasi-proyek)
-  - [Struktur Proyek](#struktur-proyek)
-  - [Keamanan](#keamanan)
-  - [Peringatan](#peringatan)
-  - [Kontribusi](#kontribusi)
-  - [Atribusi](#atribusi)
-  - [Lisensi](#lisensi)
+- [Auto Absen MagangHub](#auto-absen-maganghub)
+  - [Daftar Isi](#daftar-isi)
+  - [Memulai](#memulai)
+    - [Cara Kerja](#cara-kerja)
+    - [Prasyarat](#prasyarat)
+    - [Instalasi](#instalasi)
+    - [Konfigurasi](#konfigurasi)
+    - [Penggunaan](#penggunaan)
+  - [Penjadwalan Otomatis](#penjadwalan-otomatis)
+    - [Task Scheduler (Windows)](#task-scheduler-windows)
+    - [GitHub Actions](#github-actions)
+  - [Notifikasi Telegram](#notifikasi-telegram)
+  - [Informasi Proyek](#informasi-proyek)
+    - [Struktur Proyek](#struktur-proyek)
+    - [Keamanan](#keamanan)
+    - [Peringatan](#peringatan)
+    - [Kontribusi](#kontribusi)
+    - [Atribusi](#atribusi)
+    - [Lisensi](#lisensi)
 
 ## Memulai
 
@@ -250,25 +252,34 @@ Cara mendapatkan keduanya:
 ### Struktur Proyek
 
 ```
-main.py                   titik masuk CLI (perintah: absen, status)
-app/config.py             membaca konfigurasi dari .env
-app/auth/sso.py           login SSO Kemnaker dan permintaan access token
-app/api/client.py         klien HTTP untuk API Monev
-app/models/attendance.py  logika absen masuk dan pembacaan log harian
-app/commands.py           penangan perintah absen dan status
-app/utils/time.py         utilitas waktu zona WIB
-app/utils/log.py          pencatat console dan berkas `absen.log`
-app/utils/net.py          penanganan error jaringan dan retry
-app/utils/telegram.py     pengirim notifikasi Telegram
-.github/workflows/absen.yml  penjadwalan GitHub Actions
-.github/workflows/tests.yml  tes otomatis tiap push
-tests/test_main.py        tes otomatis (pytest)
-requirements-dev.txt      dependensi pengembangan
-setup_task.ps1            pembuat tugas Windows Task Scheduler
-.env.example              contoh berkas `.env`
-requirements.txt          daftar dependensi Python
-LICENSE                   teks lisensi MIT
-.gitattributes            aturan akhir baris Git
+auto-absen-maganghub/
+├── main.py                   titik masuk CLI (absen, status, doctor)
+├── app/
+│   ├── commands.py           perintah absen, status, doctor, dry-run
+│   ├── config.py             konfigurasi dari .env
+│   ├── auth/
+│   │   └── sso.py            login SSO Kemnaker dan access token
+│   ├── api/
+│   │   └── client.py         klien HTTP API Monev
+│   ├── models/
+│   │   └── attendance.py     logika absen dan pembacaan log
+│   └── utils/
+│       ├── log.py            console dan berkas absen.log
+│       ├── net.py            error jaringan dan retry
+│       ├── telegram.py       notifikasi Telegram
+│       └── time.py           waktu zona WIB
+├── tests/
+│   └── test_main.py          tes otomatis (pytest)
+├── .github/
+│   └── workflows/
+│       ├── absen.yml         penjadwalan GitHub Actions
+│       └── tests.yml         tes tiap push
+├── setup_task.ps1            tugas Windows Task Scheduler
+├── .env.example              contoh berkas .env
+├── requirements.txt          dependensi Python
+├── requirements-dev.txt      dependensi pengembangan
+├── LICENSE                   lisensi MIT
+└── .gitattributes            akhir baris Git
 ```
 
 ### Keamanan
