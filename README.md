@@ -1,6 +1,8 @@
 # Auto Absen MagangHub
 
-Biar gak panik kalau lupa absen MagangHub. Cukup satu perintah, program login, kirim absen, selesai. Data absen diambil dari berkas `.env`. Aman dan gak nyimpen data di mana-mana.
+Biar gak panik kalau lupa absen MagangHub. Cukup satu perintah, program login, kirim absen, selesai. Data absen diambil dari berkas `.env` dan gak disimpan di mana pun.
+
+Anggap program ini ban serep: dipakai saat kepepet, bukan tiap hari. Kalau ingat, absen sendiri tepat waktu.
 
 > Program ini tanpa jaminan apa pun. Gunakan dengan risiko sendiri — lihat bagian [Peringatan](#peringatan).
 
@@ -292,7 +294,7 @@ auto-absen-maganghub/
 
 Penulis menyediakan program ini "sebagaimana adanya", tanpa jaminan apa pun. Gunakan program ini dengan risiko sendiri ("use at your own risk").
 
-Program mengotomatiskan pengiriman absen. Pastikan cara pakai ini sesuai dengan aturan di tempat magang Anda.
+Program mengotomatiskan pengiriman absen. Program ini dirancang sebagai pengaman saat lupa absen, bukan sebagai pengganti absen manual. Pastikan cara pakai ini sesuai dengan aturan di tempat magang Anda.
 
 Penulis tidak bertanggung jawab atas akibat apa pun dari penggunaan program ini. Akibat itu mencakup penangguhan akun, sanksi, atau kerugian lain.
 
