@@ -1,0 +1,29 @@
+name: Absen
+
+on:
+  schedule:
+    # 09:00 UTC = 16:00 WIB
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  absen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Kirim absen
+        run: python main.py absen
+        env:
+          SIAPKERJA_USERNAME: ${{ secrets.SIAPKERJA_USERNAME }}
+          SIAPKERJA_PASSWORD: ${{ secrets.SIAPKERJA_PASSWORD }}
+          ACTIVITY_LOG: ${{ secrets.ACTIVITY_LOG }}
+          LESSON_LEARNED: ${{ secrets.LESSON_LEARNED }}
+          OBSTACLES: ${{ secrets.OBSTACLES }}
+          HARI_LIBUR: Sabtu,Minggu
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

@@ -1,0 +1,14 @@
+# Normalisasi akhir baris: LF di repositori untuk semua berkas teks.
+* text=auto
+
+# Skrip dan konfigurasi selalu LF (termasuk di Windows).
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.env* text eol=lf
+.gitignore text eol=lf
+
+# Skrip PowerShell mengikuti akhir baris Windows.
+*.ps1 text eol=crlf
