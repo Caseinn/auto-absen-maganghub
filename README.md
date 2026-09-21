@@ -20,6 +20,7 @@ Kalau program ini membantu Anda, pertimbangkan memberi ⭐ pada repositori ini.
     - [Penggunaan](#penggunaan)
   - [Penjadwalan Otomatis](#penjadwalan-otomatis)
     - [Task Scheduler (Windows)](#task-scheduler-windows)
+    - [Cron / Systemd Timer (Linux/VPS)](#cron--systemd-timer-linuxvps)
     - [GitHub Actions](#github-actions)
   - [Notifikasi Telegram](#notifikasi-telegram)
   - [Informasi Proyek](#informasi-proyek)
@@ -44,7 +45,7 @@ Kalau program ini membantu Anda, pertimbangkan memberi ⭐ pada repositori ini.
 
 - Python 3.10 atau versi lebih baru.
 - Akun MagangHub (login Siap Kerja) beserta kata sandi.
-- Penjadwalan lokal membutuhkan Windows. GitHub Actions tersedia sebagai alternatif tanpa Windows. Perintah manual berjalan di sistem operasi apa pun.
+- Penjadwalan lokal: Windows (Task Scheduler) atau Linux/VPS (cron/systemd). GitHub Actions tersedia sebagai alternatif tanpa komputer sendiri. Perintah manual berjalan di sistem operasi apa pun.
 
 ### Instalasi
 
@@ -56,8 +57,16 @@ Kalau program ini membantu Anda, pertimbangkan memberi ⭐ pada repositori ini.
 
 1. Pasang uv:
 
+   Windows:
+
    ```
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+   Linux/VPS:
+
+   ```
+   curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
 2. Buat lingkungan virtual, lalu pasang dependensi:
@@ -77,8 +86,16 @@ Kalau program ini membantu Anda, pertimbangkan memberi ⭐ pada repositori ini.
 
 2. Aktifkan lingkungan virtual:
 
+   Windows:
+
    ```
    .venv\Scripts\activate
+   ```
+
+   Linux/VPS:
+
+   ```
+   source .venv/bin/activate
    ```
 
 3. Pasang dependensi:
@@ -95,7 +112,7 @@ Berkas `.env` menyimpan seluruh konfigurasi. Tabel berikut memuat setiap variabe
 |---|---|---|
 | `SIAPKERJA_USERNAME` | Ya | NIK, email, atau nomor telepon akun Anda |
 | `SIAPKERJA_PASSWORD` | Ya | Kata sandi akun Anda |
-| `CLOCK_IN_TIME` | Tidak | Jam tugas untuk penjadwalan otomatis, format `HH:MM`. Kosong berarti `16:00` |
+| `CLOCK_IN_TIME` | Tidak | Jam tugas untuk skrip penjadwalan (`setup_task`, `setup_cron.sh`), format `HH:MM`. Kosong berarti `16:00`. Jadwal manual (crontab edit sendiri, systemd, GitHub Actions) memakai jadwalnya sendiri |
 | `HARI_LIBUR` | Tidak | Nama hari libur, pisahkan dengan koma. Nilai bawaan: `Sabtu,Minggu` |
 | `LATITUDE` | Tidak | Lintang lokasi absen. Nilai bawaan: `-6.2088` |
 | `LONGITUDE` | Tidak | Bujur lokasi absen. Nilai bawaan: `106.8456` |
@@ -188,7 +205,7 @@ Status: 2026-09-21
 
 ### Task Scheduler (Windows)
 
-Skrip `setup_task.ps1` membuat tugas Windows Task Scheduler bernama `AutoAbsenMaganghub`. Tugas itu menjalankan `python main.py absen` setiap hari pada jam yang Anda tentukan. Skrip menggunakan Python dari `.venv` bila ada. Bila tidak ada, skrip menggunakan Python dari PATH.
+Skrip `setup_task.bat` (klik dua kali) atau `setup_task.ps1` membuat tugas Windows Task Scheduler bernama `AutoAbsenMaganghub`. Tugas itu menjalankan `python main.py absen` setiap hari pada jam yang Anda tentukan. Skrip menggunakan Python dari `.venv` bila ada. Bila tidak ada, skrip menggunakan Python dari PATH.
 
 Catatan soal jadwal ini:
 
@@ -196,7 +213,9 @@ Catatan soal jadwal ini:
 - Bila laptop mati total atau tidak tercolok, tugas menunggu sampai laptop menyala lagi, lalu absen terkirim saat itu juga.
 
 1. Isi `CLOCK_IN_TIME` di `.env` dengan format `HH:MM`. Skrip menggunakan nilai itu sebagai jam tugas. Bila kosong, skrip menggunakan `16:00`.
-2. Buka PowerShell sebagai Administrator (klik kanan > Run as Administrator), lalu jalankan skrip. Tanpa Administrator, pendaftaran tugas gagal:
+2. Klik dua kali `setup_task.bat`. Skrip meminta akses Administrator sendiri, lalu mendaftarkan tugas. Tanpa Administrator, pendaftaran tugas gagal.
+
+   Alternatif via PowerShell Administrator:
 
    ```
    powershell -ExecutionPolicy Bypass -File .\setup_task.ps1
@@ -213,6 +232,119 @@ Untuk memeriksa status tugas:
 ```
 Get-ScheduledTask -TaskName 'AutoAbsenMaganghub'
 ```
+
+### Cron / Systemd Timer (Linux/VPS)
+
+Cocok untuk VPS yang selalu menyala. Cara termudah: jalankan skrip `setup_cron.sh`. Skrip membaca jam dari `CLOCK_IN_TIME` di `.env` dan memakai Python dari `.venv` bila ada.
+
+1. Isi `CLOCK_IN_TIME` di `.env` dengan format `HH:MM`. Bila kosong, skrip memakai `16:00`.
+2. Jalankan skrip:
+
+   ```
+   chmod +x setup_cron.sh
+   ./setup_cron.sh
+   ```
+
+   Skrip memberi peringatan bila zona waktu bukan `Asia/Jakarta`. Bila perlu, samakan dulu:
+
+   ```
+   sudo timedatectl set-timezone Asia/Jakarta
+   ```
+
+3. Pastikan perintah manual berhasil sebelum mengandalkan jadwal:
+
+   ```
+   ./.venv/bin/python main.py absen --dry-run
+   ./.venv/bin/python main.py doctor
+   ```
+
+Untuk memeriksa jadwal dan log:
+
+```
+crontab -l
+tail -f absen.log
+```
+
+Untuk mematikan otomatisasi:
+
+```
+crontab -l | grep -v '# AutoAbsenMaganghub' | crontab -
+```
+
+Setiap ganti `CLOCK_IN_TIME`, jalankan ulang `./setup_cron.sh`.
+
+**Alternatif manual tanpa skrip:**
+
+1. Buka crontab:
+
+   ```
+   crontab -e
+   ```
+
+2. Tambahkan baris berikut untuk absen tiap hari pukul 16:00 (sesuaikan path):
+
+   ```
+   0 16 * * * cd /opt/auto-absen && /opt/auto-absen/.venv/bin/python main.py absen >> /opt/auto-absen/absen.log 2>&1
+   ```
+
+   Gunakan path absolut. Ubah `0 16` untuk mengganti jam.
+
+**Alternatif lanjut, dengan systemd timer (log rapi via `journalctl`):**
+
+1. Buat berkas service `/etc/systemd/system/auto-absen.service`:
+
+   ```
+   [Unit]
+   Description=Auto Absen MagangHub
+   After=network-online.target
+   Wants=network-online.target
+
+   [Service]
+   Type=oneshot
+   WorkingDirectory=/opt/auto-absen
+   ExecStart=/opt/auto-absen/.venv/bin/python main.py absen
+   ```
+
+2. Buat berkas timer `/etc/systemd/system/auto-absen.timer`:
+
+   ```
+   [Unit]
+   Description=Auto Absen MagangHub tiap hari 16:00 WIB
+
+   [Timer]
+   OnCalendar=*-*-* 16:00:00
+   Persistent=true
+
+   [Install]
+   WantedBy=timers.target
+   ```
+
+3. Nyalakan timer:
+
+   ```
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now auto-absen.timer
+   ```
+
+Untuk memeriksa status dan log:
+
+```
+systemctl status auto-absen.timer
+systemctl list-timers auto-absen.timer
+journalctl -u auto-absen.service --since today
+```
+
+Untuk mematikan otomatisasi:
+
+```
+sudo systemctl disable --now auto-absen.timer
+```
+
+Tiga hal yang perlu Anda ketahui:
+
+- `CLOCK_IN_TIME` dibaca oleh `setup_task.ps1`/`setup_task.bat` dan `setup_cron.sh`. Jadwal cron manual, systemd timer, dan GitHub Actions memakai jadwalnya sendiri — ubah baris crontab (`0 16 ...`), `OnCalendar=`, atau baris cron workflow untuk mengganti jam.
+- Pada hari libur (`HARI_LIBUR`), program berhenti sendiri tanpa mengirim absen. Program tidak mengirim notifikasi pada hari itu.
+- Bila VPS berada di luar Indonesia, request berjalan dari IP luar negeri, sementara data lokasi absen mengklaim Jakarta. Pakai VPS region Indonesia bila hal ini penting bagi Anda.
 
 ### GitHub Actions
 
@@ -277,6 +409,8 @@ auto-absen-maganghub/
 │       ├── absen.yml         penjadwalan GitHub Actions
 │       └── tests.yml         tes tiap push
 ├── setup_task.ps1            tugas Windows Task Scheduler
+├── setup_task.bat            klik-dua-kali untuk setup_task.ps1
+├── setup_cron.sh             jadwal cron Linux/VPS
 ├── .env.example              contoh berkas .env
 ├── requirements.txt          dependensi Python
 ├── requirements-dev.txt      dependensi pengembangan
