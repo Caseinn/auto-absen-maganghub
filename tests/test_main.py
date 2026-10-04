@@ -190,7 +190,16 @@ def test_attendance_payload_shape():
     payload = AttendanceService.attendance_payload("2026-09-21")
     assert payload["date"] == "2026-09-21"
     assert payload["status"] == "PRESENT"
-    assert set(payload) == {"date", "status", "activity_log", "lesson_learned", "obstacles"}
+    assert set(payload) == {
+        "date",
+        "status",
+        "latitude",
+        "longitude",
+        "location",
+        "activity_log",
+        "lesson_learned",
+        "obstacles",
+    }
 
 
 def test_date_str_format():

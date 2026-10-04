@@ -114,9 +114,9 @@ Berkas `.env` menyimpan seluruh konfigurasi. Tabel berikut memuat setiap variabe
 | `SIAPKERJA_PASSWORD` | Ya | Kata sandi akun Anda |
 | `CLOCK_IN_TIME` | Tidak | Jam tugas untuk skrip penjadwalan (`setup_task`, `setup_cron.sh`), format `HH:MM`. Kosong berarti `16:00`. Jadwal manual (crontab edit sendiri, systemd, GitHub Actions) memakai jadwalnya sendiri |
 | `HARI_LIBUR` | Tidak | Nama hari libur, pisahkan dengan koma. Nilai bawaan: `Sabtu,Minggu` |
-| `LATITUDE` | Tidak | Lintang lokasi absen. Nilai bawaan: `-6.2088` |
-| `LONGITUDE` | Tidak | Bujur lokasi absen. Nilai bawaan: `106.8456` |
-| `LOCATION` | Tidak | Nama lokasi absen. Nilai bawaan: `Jakarta` |
+| `LATITUDE` | Tidak | Lintang lokasi absen, dikirim dalam payload absen. Nilai bawaan: `-6.2088` |
+| `LONGITUDE` | Tidak | Bujur lokasi absen, dikirim dalam payload absen. Nilai bawaan: `106.8456` |
+| `LOCATION` | Tidak | Nama lokasi absen, dikirim dalam payload absen. Nilai bawaan: `Jakarta` |
 | `ACTIVITY_LOG` | Ya | Isian kolom aktivitas harian |
 | `LESSON_LEARNED` | Ya | Isian kolom pelajaran hari ini |
 | `OBSTACLES` | Ya | Isian kolom kendala harian |

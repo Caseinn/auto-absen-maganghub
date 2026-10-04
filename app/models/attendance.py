@@ -52,6 +52,9 @@ class AttendanceService:
         return {
             "date": date,
             "status": "PRESENT",
+            "latitude": settings.latitude,
+            "longitude": settings.longitude,
+            "location": settings.location,
             "activity_log": settings.activity_log,
             "lesson_learned": settings.lesson_learned,
             "obstacles": settings.obstacles,
