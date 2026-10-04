@@ -8,7 +8,7 @@ from app.config import settings
 from app.models.attendance import AttendanceService
 from app.utils.log import log
 from app.utils.net import network_guard, with_retry
-from app.utils.telegram import notify
+from app.utils.telegram import log_notify, notify
 from app.utils.time import date_str, now_wib, today_str
 
 HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -62,9 +62,7 @@ def cmd_absen(svc: AttendanceService) -> int:
         return 1
     unknown = invalid_days()
     if unknown:
-        msg = f"[FAIL] Nama hari tidak dikenal di HARI_LIBUR: {', '.join(unknown)}"
-        log(msg)
-        notify(msg)
+        log_notify(f"[FAIL] Nama hari tidak dikenal di HARI_LIBUR: {', '.join(unknown)}")
         return 1
     if should_skip():
         log("[SKIP] Hari ini libur, absen dilewati.")
@@ -73,17 +71,11 @@ def cmd_absen(svc: AttendanceService) -> int:
         with_retry("Absen", lambda: svc.clock_in(today_str()))
     except Exception as e:
         if getattr(e, "status_code", None) == 409:
-            msg = "[OK] Sudah absen hari ini."
-            log(msg)
-            notify(msg)
+            log_notify("[OK] Sudah absen hari ini.")
             return 0
-        msg = f"[FAIL] {e}"
-        log(msg)
-        notify(msg)
+        log_notify(f"[FAIL] {e}")
         return 1
-    msg = f"[OK] Absen {today_str()} berhasil terkirim."
-    log(msg)
-    notify(msg)
+    log_notify(f"[OK] Absen {today_str()} berhasil terkirim.")
     return 0
 
 

@@ -6,6 +6,7 @@ import time
 import requests
 
 from app.utils.log import log
+from app.utils.telegram import log_notify
 
 MAX_ATTEMPTS = 3
 RETRY_DELAY = 60  # seconds
@@ -22,18 +23,8 @@ def net_msg(e: Exception) -> str:
     return "[FAIL] Gagal terhubung ke server. Cek koneksi internet."
 
 
-def net_fail(e: Exception) -> int:
-    """Log a message for a network error and return exit code 1.
-
-    Args:
-        e: The caught exception.
-    """
-    log(net_msg(e))
-    return 1
-
-
 def network_guard(func):
-    """Catch network errors, log a clear message, and return 1.
+    """Catch network errors, log and notify, and return exit code 1.
 
     Args:
         func: Command function returning an exit code.
@@ -43,9 +34,10 @@ def network_guard(func):
         try:
             return func(*args, **kwargs)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            return net_fail(e)
+            log_notify(net_msg(e))
+            return 1
         except Exception as e:
-            log(f"[FAIL] {e}")
+            log_notify(f"[FAIL] {e}")
             return 1
     return wrapper
 

@@ -28,3 +28,13 @@ def notify(text: str) -> None:
         )
     except Exception as e:
         log(f"[WARN] Notifikasi Telegram gagal: {e}")
+
+
+def log_notify(text: str) -> None:
+    """Log a message and send it as a Telegram notification.
+
+    Args:
+        text: Message text to log and send.
+    """
+    log(text)
+    notify(text)

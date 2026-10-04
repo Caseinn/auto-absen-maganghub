@@ -9,7 +9,7 @@ from app.commands import cmd_absen, cmd_doctor, cmd_dry_run, cmd_status
 from app.models.attendance import AttendanceService
 from app.utils.log import log
 from app.utils.net import net_msg, with_retry
-from app.utils.telegram import notify
+from app.utils.telegram import log_notify
 
 
 def main():
@@ -35,14 +35,10 @@ def main():
         svc = AttendanceService()
         with_retry("Login", svc.login)
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-        msg = net_msg(e)
-        log(msg)
-        notify(msg)
+        log_notify(net_msg(e))
         sys.exit(1)
     except Exception as e:
-        msg = f"[FAIL] {e}"
-        log(msg)
-        notify(msg)
+        log_notify(f"[FAIL] {e}")
         sys.exit(1)
     log("[OK] Login berhasil")
 
