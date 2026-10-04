@@ -22,15 +22,14 @@ class ApiError(Exception):
 class ApiClient:
     """HTTP client with Bearer token authentication."""
 
-    def __init__(self, token: str, base_url: str = ""):
+    def __init__(self, token: str):
         """Initialize client with an access token.
 
         Args:
             token: Bearer access token.
-            base_url: API base URL. Defaults to settings value.
         """
         from app.config import settings
-        self.base_url = base_url or settings.api_base
+        self.base_url = settings.api_base
         self.session = requests.Session()
         self.session.headers.update({
             "Accept": "application/json",
