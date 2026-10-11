@@ -114,6 +114,7 @@ Berkas `.env` menyimpan seluruh konfigurasi. Tabel berikut memuat setiap variabe
 | `SIAPKERJA_PASSWORD` | Ya | Kata sandi akun Anda |
 | `CLOCK_IN_TIME` | Tidak | Jam tugas untuk skrip penjadwalan (`setup_task`, `setup_cron.sh`), format `HH:MM`. Kosong berarti `16:00`. Jadwal manual (crontab edit sendiri, systemd, GitHub Actions) memakai jadwalnya sendiri |
 | `HARI_LIBUR` | Tidak | Nama hari libur, pisahkan dengan koma. Nilai bawaan: `Sabtu,Minggu` |
+| `LIBUR_NASIONAL` | Tidak | Cek kalender libur nasional dari API Monev sebelum absen. Nilai bawaan: `true` |
 | `LATITUDE` | Tidak | Lintang lokasi absen, dikirim dalam payload absen. Nilai bawaan: `-6.2088` |
 | `LONGITUDE` | Tidak | Bujur lokasi absen, dikirim dalam payload absen. Nilai bawaan: `106.8456` |
 | `LOCATION` | Tidak | Nama lokasi absen, dikirim dalam payload absen. Nilai bawaan: `Jakarta` |
@@ -125,6 +126,15 @@ Berkas `.env` menyimpan seluruh konfigurasi. Tabel berikut memuat setiap variabe
 
 Program juga membaca `API_BASE` dan `AUTH_BASE`. Nilai bawaan kedua variabel itu sudah mengarah ke API Monev resmi. Ubah kedua nilai itu hanya jika alamat API berubah.
 
+### Libur Nasional
+
+Selain `HARI_LIBUR`, program membaca kalender libur resmi dari `GET /api/v1/holidays` sebelum mengirim absen. Bila hari ini berstatus libur nasional, absen dilewati tanpa notifikasi.
+
+- Hanya libur dengan `scope: NATIONAL` yang dipakai. Libur provinsi dan kabupaten diabaikan.
+- Kalender diambil sekali per eksekusi, jadi memeriksa beberapa tanggal hanya memakai satu permintaan.
+- Bila API libur tidak bisa dihubungi, program mencatat `[WARN]` lalu tetap mengirim absen. Kalender libur bersifat pelengkap, bukan syarat absen.
+- Set `LIBUR_NASIONAL=false` untuk mematikan pengecekan dan kembali ke `HARI_LIBUR` saja.
+
 Semua nilai di atas dapat Anda ubah sesuai kebutuhan. Contoh isi `.env` dengan nilai bawaan:
 
 ```
@@ -132,6 +142,7 @@ SIAPKERJA_USERNAME=your_nik_or_email_or_phone
 SIAPKERJA_PASSWORD=your_password
 CLOCK_IN_TIME=16:00
 HARI_LIBUR=Sabtu,Minggu
+LIBUR_NASIONAL=true
 LATITUDE=-6.2088
 LONGITUDE=106.8456
 LOCATION=Jakarta
@@ -343,7 +354,7 @@ sudo systemctl disable --now auto-absen.timer
 Tiga hal yang perlu Anda ketahui:
 
 - `CLOCK_IN_TIME` dibaca oleh `setup_task.ps1`/`setup_task.bat` dan `setup_cron.sh`. Jadwal cron manual, systemd timer, dan GitHub Actions memakai jadwalnya sendiri — ubah baris crontab (`0 16 ...`), `OnCalendar=`, atau baris cron workflow untuk mengganti jam.
-- Pada hari libur (`HARI_LIBUR`), program berhenti sendiri tanpa mengirim absen. Program tidak mengirim notifikasi pada hari itu.
+- Pada hari libur (`HARI_LIBUR`) maupun libur nasional, program berhenti sendiri tanpa mengirim absen. Program tidak mengirim notifikasi pada hari itu.
 - Bila VPS berada di luar Indonesia, request berjalan dari IP luar negeri, sementara data lokasi absen mengklaim Jakarta. Pakai VPS region Indonesia bila hal ini penting bagi Anda.
 
 ### GitHub Actions
@@ -368,7 +379,7 @@ Empat hal yang perlu Anda ketahui:
 - GitHub tidak menjamin cron berjalan tepat waktu.
 - Request berjalan dari server GitHub di luar Indonesia, sementara data lokasi absen mengklaim Jakarta.
 - Jam eksekusi dikunci di baris cron berkas workflow. `CLOCK_IN_TIME` tidak berpengaruh pada jadwal GitHub Actions. Ubah baris cron untuk mengganti jam.
-- Pada hari libur (`HARI_LIBUR`), program berhenti sendiri tanpa mengirim absen. Program tidak mengirim notifikasi pada hari itu.
+- Pada hari libur (`HARI_LIBUR`) maupun libur nasional, program berhenti sendiri tanpa mengirim absen. Program tidak mengirim notifikasi pada hari itu.
 
 ## Notifikasi Telegram
 
@@ -396,7 +407,8 @@ auto-absen-maganghub/
 │   ├── api/
 │   │   └── client.py         klien HTTP API Monev
 │   ├── models/
-│   │   └── attendance.py     logika absen dan pembacaan log
+│   │   ├── attendance.py     logika absen dan pembacaan log
+│   │   └── holiday.py        kalender libur nasional dari API
 │   └── utils/
 │       ├── log.py            console dan berkas absen.log
 │       ├── net.py            error jaringan dan retry

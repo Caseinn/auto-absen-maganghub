@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     siapkerja_username: str = ""
     siapkerja_password: str = ""
     hari_libur: str = "Sabtu,Minggu"
+    libur_nasional: bool = True
     latitude: str = "-6.2088"
     longitude: str = "106.8456"
     location: str = "Jakarta"

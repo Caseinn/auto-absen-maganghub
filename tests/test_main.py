@@ -8,9 +8,10 @@ import requests
 import app.commands as commands
 import app.utils.net as netmod
 from app.api.client import ApiError
-from app.commands import cmd_dry_run, cmd_status, invalid_days, should_skip, validate_env
+from app.commands import cmd_dry_run, cmd_status, find_holiday, holiday_service, invalid_days, should_skip, validate_env
 from app.models.attendance import AttendanceService
 from app.models.attendance import DailyLog
+from app.models.holiday import Holiday, HolidayService
 from app.utils.net import net_msg, retryable, with_retry
 from app.utils.time import date_str, now_wib
 
@@ -314,3 +315,191 @@ def test_status_history_readable(capsys):
     assert f"[OK] {date_str(1)}  Tidak Hadir" in out
     assert f"[OK] {date_str(2)}  Hadir" in out
     assert "tercatat" not in out
+
+
+def _national_holiday(date, name="Proklamasi Kemerdekaan"):
+    return {
+        "id": 1,
+        "date": date,
+        "name": name,
+        "type": "NATIONAL",
+        "scope": "NATIONAL",
+        "province_code": None,
+        "regency_code": None,
+    }
+
+
+def _provincial_holiday(date, name="Cuti Bersama"):
+    return {
+        "id": 2,
+        "date": date,
+        "name": name,
+        "type": "REGIONAL",
+        "scope": "PROVINCE",
+        "province_code": "96",
+        "regency_code": None,
+    }
+
+
+def test_holiday_parsing():
+    h = Holiday(_national_holiday("2026-08-17"))
+    assert h.date == "2026-08-17"
+    assert h.name == "Proklamasi Kemerdekaan"
+    assert h.is_national is True
+
+
+def test_holiday_missing_optional_fields():
+    h = Holiday({"date": "2026-12-25"})
+    assert h.name == ""
+    assert h.scope == ""
+    assert h.is_national is False
+
+
+def test_provincial_holiday_is_not_national():
+    h = Holiday(_provincial_holiday("2026-08-24"))
+    assert h.is_national is False
+
+
+def test_holiday_service_finds_date():
+    svc = HolidayService()
+
+    class FakeApiClient:
+        def get(self, path, params=None):
+            return {"data": [
+                _national_holiday("2026-08-25", "Maulid Nabi"),
+                _national_holiday("2026-12-25"),
+            ], "total": 2}
+
+    svc._client = FakeApiClient()
+    assert svc.find("2026-08-25").name == "Maulid Nabi"
+    assert svc.find("2026-12-25") is not None
+    assert svc.find("2026-10-01") is None
+
+
+def test_holiday_service_ignores_regional_holidays():
+    svc = HolidayService()
+
+    class FakeApiClient:
+        def get(self, path, params=None):
+            return {"data": [_provincial_holiday("2026-08-24")], "total": 1}
+
+    svc._client = FakeApiClient()
+    assert svc.find("2026-08-24") is None
+
+
+def test_holiday_service_follows_pagination():
+    svc = HolidayService()
+    calls = []
+
+    class PagedApiClient:
+        def get(self, path, params=None):
+            page = (params or {}).get("page", 1)
+            calls.append((path, page))
+            if page == 1:
+                return {"data": [_national_holiday("2026-08-17")], "total": 2}
+            return {"data": [_national_holiday("2026-08-25")], "total": 2}
+
+    svc._client = PagedApiClient()
+    assert len(svc.list_holidays()) == 2
+    assert svc.find("2026-08-25") is not None
+    assert calls == [("/holidays", 1), ("/holidays", 2)]
+
+
+def test_holiday_service_caches_one_request():
+    svc = HolidayService()
+    calls = []
+
+    class CountingApiClient:
+        def get(self, path, params=None):
+            calls.append(path)
+            return {"data": [_national_holiday("2026-08-17")], "total": 1}
+
+    svc._client = CountingApiClient()
+    assert svc.find("2026-08-17") is not None
+    assert svc.find("2026-08-18") is None
+    assert calls == ["/holidays"]
+
+
+def test_holiday_service_disabled(monkeypatch):
+    monkeypatch.setattr(commands.settings, "libur_nasional", False)
+    assert holiday_service() is None
+    assert find_holiday(None, "2026-08-17") is None
+
+
+def test_holiday_lookup_fails_open(monkeypatch, capsys):
+    monkeypatch.setattr(commands.settings, "libur_nasional", True)
+
+    class BrokenService:
+        def find(self, date):
+            raise ApiError(500, "server libur mati")
+
+    assert find_holiday(BrokenService(), "2026-08-17") is None
+    assert "[WARN]" in capsys.readouterr().out
+
+
+def test_cmd_absen_skips_on_national_holiday(monkeypatch, capsys):
+    _fill_env(monkeypatch)
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+
+    class StubService:
+        def clock_in(self, date):
+            raise AssertionError("tidak boleh absen pada hari libur")
+
+    class HolidayOnToday:
+        def find(self, date):
+            return Holiday(_national_holiday(date, "Maulid Nabi"))
+
+    monkeypatch.setattr(commands, "holiday_service", lambda: HolidayOnToday())
+    assert commands.cmd_absen(StubService()) == 0
+    out = capsys.readouterr().out
+    assert "[SKIP]" in out
+    assert "Maulid Nabi" in out
+
+
+def test_cmd_absen_proceeds_on_workday(monkeypatch, capsys):
+    _fill_env(monkeypatch)
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+    sent = []
+
+    class StubService:
+        def clock_in(self, date):
+            sent.append(date)
+            return {"ok": True}
+
+    class NoHolidayToday:
+        def find(self, date):
+            return None
+
+    monkeypatch.setattr(commands, "holiday_service", lambda: NoHolidayToday())
+    monkeypatch.setattr(commands.settings, "telegram_bot_token", "")
+    monkeypatch.setattr(commands.settings, "telegram_chat_id", "")
+    assert commands.cmd_absen(StubService()) == 0
+    assert sent == [date_str(0)]
+
+
+def test_status_history_marks_holidays(monkeypatch, capsys):
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+
+    class HolidayYesterday:
+        def find(self, date):
+            if date == date_str(1):
+                return Holiday(_national_holiday(date, "Proklamasi Kemerdekaan"))
+            return None
+
+    monkeypatch.setattr(commands, "holiday_service", lambda: HolidayYesterday())
+    assert cmd_status(FakeService({}), days=3) == 0
+    out = capsys.readouterr().out
+    assert f"[OK] {date_str(1)}  Libur: Proklamasi Kemerdekaan" in out
+    assert f"[OK] {date_str(2)}  Tidak Hadir" in out
+
+
+def test_status_today_explains_holiday(monkeypatch, capsys):
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+
+    class HolidayToday:
+        def find(self, date):
+            return Holiday(_national_holiday(date, "Kelahiran Yesus Kristus"))
+
+    monkeypatch.setattr(commands, "holiday_service", lambda: HolidayToday())
+    assert cmd_status(FakeService({})) == 0
+    assert "hari libur: Kelahiran Yesus Kristus" in capsys.readouterr().out

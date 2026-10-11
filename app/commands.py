@@ -6,6 +6,7 @@ import subprocess
 
 from app.config import settings
 from app.models.attendance import AttendanceService
+from app.models.holiday import Holiday, HolidayService
 from app.utils.log import log
 from app.utils.net import network_guard, with_retry
 from app.utils.telegram import log_notify, notify
@@ -33,6 +34,32 @@ def invalid_days() -> list[str]:
         if name and name.casefold() not in known:
             bad.append(name)
     return bad
+
+
+def holiday_service() -> HolidayService | None:
+    """Return a holiday service, or None if the holiday check is disabled."""
+    if not settings.libur_nasional:
+        return None
+    return HolidayService()
+
+
+def find_holiday(holidays: HolidayService | None, date: str) -> Holiday | None:
+    """Return the holiday on a date, or None. Never raises.
+
+    A holiday calendar is a convenience, not a requirement, so a failure
+    to reach the API is logged and attendance still proceeds.
+
+    Args:
+        holidays: Holiday service, or None when the check is disabled.
+        date: Date in YYYY-MM-DD format.
+    """
+    if holidays is None:
+        return None
+    try:
+        return holidays.find(date)
+    except Exception as e:
+        log(f"[WARN] Gagal membaca daftar libur, absen tetap dilanjutkan: {e}")
+        return None
 
 
 def validate_env():
@@ -67,6 +94,10 @@ def cmd_absen(svc: AttendanceService) -> int:
     if should_skip():
         log("[SKIP] Hari ini libur, absen dilewati.")
         return 0
+    holiday = find_holiday(holiday_service(), today_str())
+    if holiday:
+        log(f"[SKIP] {holiday.date} hari libur: {holiday.name}. Absen dilewati.")
+        return 0
     try:
         with_retry("Absen", lambda: svc.clock_in(today_str()))
     except Exception as e:
@@ -99,6 +130,10 @@ def cmd_status(svc: AttendanceService, days: int = 1) -> int:
     if days == 1:
         entry = svc.get_log(today_str())
         if not entry:
+            holiday = find_holiday(holiday_service(), today_str())
+            if holiday:
+                log(f"{today_str()} hari libur: {holiday.name}")
+                return 0
             log(f"Belum ada absen pada {today_str()}")
             return 0
         log(f"Status: {entry.date}")
@@ -106,11 +141,16 @@ def cmd_status(svc: AttendanceService, days: int = 1) -> int:
         log(f"  Pelajaran:  {entry.lesson_learned or 'tidak tercatat'}")
         log(f"  Kendala:    {entry.obstacles or 'tidak tercatat'}")
         return 0
+    holidays = holiday_service()
     for ago in range(days):
         date = date_str(ago)
         entry = svc.get_log(date)
         if entry:
             log(f"[OK] {date}  Hadir")
+            continue
+        holiday = find_holiday(holidays, date)
+        if holiday:
+            log(f"[OK] {date}  Libur: {holiday.name}")
         else:
             log(f"[OK] {date}  Tidak Hadir")
     return 0
@@ -139,6 +179,15 @@ def cmd_doctor() -> int:
     except Exception as e:
         log(f"[FAIL] Login gagal: {e}")
         failed += 1
+
+    holidays = holiday_service()
+    if holidays is None:
+        log("[SKIP] Cek libur nasional dinonaktifkan (LIBUR_NASIONAL=false).")
+    else:
+        try:
+            log(f"[OK] Daftar libur terbaca: {len(holidays.list_holidays())} entri.")
+        except Exception as e:
+            log(f"[WARN] Daftar libur tidak terbaca, absen tetap berjalan: {e}")
 
     if settings.telegram_bot_token and settings.telegram_chat_id:
         notify("Notifikasi Telegram aktif. (Pesan tes dari doctor.)")
