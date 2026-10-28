@@ -113,6 +113,7 @@ Berkas `.env` menyimpan seluruh konfigurasi. Tabel berikut memuat setiap variabe
 | `SIAPKERJA_USERNAME` | Ya | NIK, email, atau nomor telepon akun Anda |
 | `SIAPKERJA_PASSWORD` | Ya | Kata sandi akun Anda |
 | `CLOCK_IN_TIME` | Tidak | Jam tugas untuk skrip penjadwalan (`setup_task`, `setup_cron.sh`), format `HH:MM`. Kosong berarti `16:00`. Jadwal manual (crontab edit sendiri, systemd, GitHub Actions) memakai jadwalnya sendiri |
+| `REMINDER_TIMES` | Tidak | Jam pengingat Telegram bila hari ini belum absen, pisahkan dengan koma, format `HH:MM`. Nilai bawaan: `16:00,21:00` |
 | `HARI_LIBUR` | Tidak | Nama hari libur, pisahkan dengan koma. Nilai bawaan: `Sabtu,Minggu` |
 | `LIBUR_NASIONAL` | Tidak | Cek kalender libur nasional dari API Monev sebelum absen. Nilai bawaan: `true` |
 | `LATITUDE` | Tidak | Lintang lokasi absen, dikirim dalam payload absen. Nilai bawaan: `-6.2088` |
@@ -141,6 +142,7 @@ Semua nilai di atas dapat Anda ubah sesuai kebutuhan. Contoh isi `.env` dengan n
 SIAPKERJA_USERNAME=your_nik_or_email_or_phone
 SIAPKERJA_PASSWORD=your_password
 CLOCK_IN_TIME=16:00
+REMINDER_TIMES=16:00,21:00
 HARI_LIBUR=Sabtu,Minggu
 LIBUR_NASIONAL=true
 LATITUDE=-6.2088
@@ -168,6 +170,14 @@ Tampilkan log absen hari ini:
 ```
 python main.py status
 ```
+
+Kirim pengingat Telegram bila hari ini belum absen:
+
+```
+python main.py remind
+```
+
+Pengingat dilewati pada hari libur. Bila absen hari ini sudah tercatat, perintah ini hanya mencatat `[OK]` dan tidak mengirim pesan. Notifikasi hanya terkirim bila `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` sudah diisi.
 
 Bila menggunakan uv, jalankan `uv run main.py absen` atau `uv run main.py status`. Perintah itu langsung menggunakan lingkungan `.venv` tanpa aktivasi.
 
@@ -216,40 +226,50 @@ Status: 2026-09-21
 
 ### Task Scheduler (Windows)
 
-Skrip `setup_task.bat` (klik dua kali) atau `setup_task.ps1` membuat tugas Windows Task Scheduler bernama `AutoAbsenMaganghub`. Tugas itu menjalankan `python main.py absen` setiap hari pada jam yang Anda tentukan. Skrip menggunakan Python dari `.venv` bila ada. Bila tidak ada, skrip menggunakan Python dari PATH.
+Dua skrip terpisah mengurus jadwal Windows:
+
+- `setup_task.bat` membuat tugas `AutoAbsenMaganghub` yang menjalankan `python main.py absen`.
+- `setup_reminder.bat` membuat tugas `AutoAbsenMaganghubReminder` yang menjalankan `python main.py remind`.
+
+Keduanya memakai Python dari `.venv` bila ada. Bila tidak ada, keduanya memakai Python dari PATH.
 
 Catatan soal jadwal ini:
 
 - Laptop boleh tidur. Pada jam absen, tugas mengaktifkan kembali laptop yang tidur, asalkan laptop sedang tercolok ke pengisi daya.
 - Bila laptop mati total atau tidak tercolok, tugas menunggu sampai laptop menyala lagi, lalu absen terkirim saat itu juga.
 
-1. Isi `CLOCK_IN_TIME` di `.env` dengan format `HH:MM`. Skrip menggunakan nilai itu sebagai jam tugas. Bila kosong, skrip menggunakan `16:00`.
-2. Klik dua kali `setup_task.bat`. Skrip meminta akses Administrator sendiri, lalu mendaftarkan tugas. Tanpa Administrator, pendaftaran tugas gagal.
+1. Isi `CLOCK_IN_TIME` di `.env` dengan format `HH:MM`. Skrip `setup_task` menggunakan nilai itu sebagai jam absen. Bila kosong, skrip menggunakan `16:00`.
+2. Isi `REMINDER_TIMES` di `.env` dengan format `HH:MM,HH:MM`. Skrip `setup_reminder` membuat satu tugas dengan beberapa pemicu. Bila kosong, skrip menggunakan `16:00,21:00`.
+3. Klik dua kali `setup_task.bat`, lalu `setup_reminder.bat`. Setiap skrip meminta akses Administrator sendiri. Tanpa Administrator, pendaftaran tugas gagal.
 
    Alternatif via PowerShell Administrator:
 
    ```
    powershell -ExecutionPolicy Bypass -File .\setup_task.ps1
+   powershell -ExecutionPolicy Bypass -File .\setup_reminder.ps1
    ```
 
 Untuk mematikan otomatisasi, hapus tugas:
 
 ```
 Unregister-ScheduledTask -TaskName 'AutoAbsenMaganghub' -Confirm:$false
+Unregister-ScheduledTask -TaskName 'AutoAbsenMaganghubReminder' -Confirm:$false
 ```
 
 Untuk memeriksa status tugas:
 
 ```
 Get-ScheduledTask -TaskName 'AutoAbsenMaganghub'
+Get-ScheduledTask -TaskName 'AutoAbsenMaganghubReminder'
 ```
 
 ### Cron / Systemd Timer (Linux/VPS)
 
-Cocok untuk VPS yang selalu menyala. Cara termudah: jalankan skrip `setup_cron.sh`. Skrip membaca jam dari `CLOCK_IN_TIME` di `.env` dan memakai Python dari `.venv` bila ada.
+Cocok untuk VPS yang selalu menyala. Cara termudah: jalankan skrip `setup_cron.sh`. Skrip membaca jam dari `CLOCK_IN_TIME` dan `REMINDER_TIMES` di `.env`, lalu memakai Python dari `.venv` bila ada.
 
 1. Isi `CLOCK_IN_TIME` di `.env` dengan format `HH:MM`. Bila kosong, skrip memakai `16:00`.
-2. Jalankan skrip:
+2. Isi `REMINDER_TIMES` di `.env` dengan format `HH:MM,HH:MM`. Bila kosong, skrip memakai `16:00,21:00`.
+3. Jalankan skrip:
 
    ```
    chmod +x setup_cron.sh
@@ -266,6 +286,7 @@ Cocok untuk VPS yang selalu menyala. Cara termudah: jalankan skrip `setup_cron.s
 
    ```
    ./.venv/bin/python main.py absen --dry-run
+   ./.venv/bin/python main.py remind
    ./.venv/bin/python main.py doctor
    ```
 
@@ -282,7 +303,7 @@ Untuk mematikan otomatisasi:
 crontab -l | grep -v '# AutoAbsenMaganghub' | crontab -
 ```
 
-Setiap ganti `CLOCK_IN_TIME`, jalankan ulang `./setup_cron.sh`.
+Setiap ganti `CLOCK_IN_TIME` atau `REMINDER_TIMES`, jalankan ulang `./setup_cron.sh`.
 
 **Alternatif manual tanpa skrip:**
 
@@ -298,7 +319,14 @@ Setiap ganti `CLOCK_IN_TIME`, jalankan ulang `./setup_cron.sh`.
    0 16 * * * cd /opt/auto-absen && /opt/auto-absen/.venv/bin/python main.py absen >> /opt/auto-absen/absen.log 2>&1
    ```
 
-   Gunakan path absolut. Ubah `0 16` untuk mengganti jam.
+   Tambahkan juga baris pengingat untuk pukul 16:00 dan 21:00:
+
+   ```
+   0 16 * * * cd /opt/auto-absen && /opt/auto-absen/.venv/bin/python main.py remind >> /opt/auto-absen/absen.log 2>&1
+   0 21 * * * cd /opt/auto-absen && /opt/auto-absen/.venv/bin/python main.py remind >> /opt/auto-absen/absen.log 2>&1
+   ```
+
+   Gunakan path absolut. Ubah `0 16` atau `0 21` untuk mengganti jam.
 
 **Alternatif lanjut, dengan systemd timer (log rapi via `journalctl`):**
 
@@ -353,13 +381,15 @@ sudo systemctl disable --now auto-absen.timer
 
 Tiga hal yang perlu Anda ketahui:
 
-- `CLOCK_IN_TIME` dibaca oleh `setup_task.ps1`/`setup_task.bat` dan `setup_cron.sh`. Jadwal cron manual, systemd timer, dan GitHub Actions memakai jadwalnya sendiri — ubah baris crontab (`0 16 ...`), `OnCalendar=`, atau baris cron workflow untuk mengganti jam.
-- Pada hari libur (`HARI_LIBUR`) maupun libur nasional, program berhenti sendiri tanpa mengirim absen. Program tidak mengirim notifikasi pada hari itu.
+- `CLOCK_IN_TIME` dibaca oleh `setup_task.ps1`/`setup_task.bat` dan `setup_cron.sh`. `REMINDER_TIMES` dibaca oleh `setup_reminder.ps1`/`setup_reminder.bat` dan `setup_cron.sh`. Jadwal cron manual, systemd timer, dan GitHub Actions memakai jadwalnya sendiri — ubah baris crontab (`0 16 ...`), `OnCalendar=`, atau baris cron workflow untuk mengganti jam.
+- Pada hari libur (`HARI_LIBUR`) maupun libur nasional, program berhenti sendiri tanpa mengirim absen. Pengingat juga dilewati. Program tidak mengirim notifikasi pada hari itu.
 - Bila VPS berada di luar Indonesia, request berjalan dari IP luar negeri, sementara data lokasi absen mengklaim Jakarta. Pakai VPS region Indonesia bila hal ini penting bagi Anda.
+
+Catatan: bila `CLOCK_IN_TIME` dan salah satu jam di `REMINDER_TIMES` sama (misalnya sama-sama `16:00`), absen otomatis dan pengingat berjalan berdekatan. Pengingat tetap aman karena hanya mengirim pesan bila absen hari itu belum tercatat.
 
 ### GitHub Actions
 
-Berkas `.github/workflows/absen.yml` menjalankan `python main.py absen` setiap hari pukul 16:00 WIB. Jadwal ditulis dalam UTC: `0 9 * * *`.
+Berkas `.github/workflows/absen.yml` menjalankan `python main.py absen` setiap hari pukul 16:00 WIB. Berkas `.github/workflows/reminder.yml` menjalankan `python main.py remind` pada pukul 16:00 dan 21:00 WIB. Jadwal ditulis dalam UTC: `0 9 * * *` dan `0 14 * * *`.
 
 1. Unggah proyek ini ke repositori GitHub.
 2. Buka Settings > Secrets and variables > Actions > New repository secret. Buat secret berikut:
@@ -370,20 +400,20 @@ Berkas `.github/workflows/absen.yml` menjalankan `python main.py absen` setiap h
    - `OBSTACLES`
    - `TELEGRAM_BOT_TOKEN` (opsional, untuk notifikasi)
    - `TELEGRAM_CHAT_ID` (opsional, untuk notifikasi)
-3. Jalankan manual sekali lewat Actions > Absen > Run workflow untuk memastikan semuanya bekerja.
+3. Jalankan manual sekali lewat Actions > Absen atau Actions > Pengingat Absen > Run workflow untuk memastikan semuanya bekerja.
 
-Untuk mematikan otomatisasi, buka Actions > Absen > tombol `...` > Disable workflow. Untuk menyalakan lagi, pilih Enable workflow di tempat yang sama.
+Untuk mematikan otomatisasi, buka Actions > Absen atau Actions > Pengingat Absen > tombol `...` > Disable workflow. Untuk menyalakan lagi, pilih Enable workflow di tempat yang sama.
 
 Empat hal yang perlu Anda ketahui:
 
 - GitHub tidak menjamin cron berjalan tepat waktu.
 - Request berjalan dari server GitHub di luar Indonesia, sementara data lokasi absen mengklaim Jakarta.
-- Jam eksekusi dikunci di baris cron berkas workflow. `CLOCK_IN_TIME` tidak berpengaruh pada jadwal GitHub Actions. Ubah baris cron untuk mengganti jam.
-- Pada hari libur (`HARI_LIBUR`) maupun libur nasional, program berhenti sendiri tanpa mengirim absen. Program tidak mengirim notifikasi pada hari itu.
+- Jam eksekusi dikunci di baris cron berkas workflow. `CLOCK_IN_TIME` dan `REMINDER_TIMES` tidak berpengaruh pada jadwal GitHub Actions. Ubah baris cron untuk mengganti jam.
+- Pada hari libur (`HARI_LIBUR`) maupun libur nasional, program berhenti sendiri tanpa mengirim absen. Pengingat juga dilewati. Program tidak mengirim notifikasi pada hari itu.
 
 ## Notifikasi Telegram
 
-Program mengirim pesan Telegram setiap kali absen berhasil atau gagal. Notifikasi tidak aktif bila `TELEGRAM_BOT_TOKEN` atau `TELEGRAM_CHAT_ID` kosong.
+Program mengirim pesan Telegram setiap kali absen berhasil atau gagal. Program juga mengirim pengingat bila hari ini belum absen pada jam-jam di `REMINDER_TIMES`. Notifikasi tidak aktif bila `TELEGRAM_BOT_TOKEN` atau `TELEGRAM_CHAT_ID` kosong.
 
 Cara mendapatkan keduanya:
 
@@ -398,9 +428,9 @@ Cara mendapatkan keduanya:
 
 ```
 auto-absen-maganghub/
-├── main.py                   titik masuk CLI (absen, status, doctor)
+├── main.py                   titik masuk CLI (absen, status, remind, doctor)
 ├── app/
-│   ├── commands.py           perintah absen, status, doctor, dry-run
+│   ├── commands.py           perintah absen, status, remind, doctor, dry-run
 │   ├── config.py             konfigurasi dari .env
 │   ├── auth/
 │   │   └── sso.py            login SSO Kemnaker dan access token
@@ -418,10 +448,14 @@ auto-absen-maganghub/
 │   └── test_main.py          tes otomatis (pytest)
 ├── .github/
 │   └── workflows/
-│       ├── absen.yml         penjadwalan GitHub Actions
+│       ├── absen.yml         penjadwalan absen GitHub Actions
+│       ├── reminder.yml      penjadwalan pengingat GitHub Actions
 │       └── tests.yml         tes tiap push
-├── setup_task.ps1            tugas Windows Task Scheduler
+├── setup_common.ps1          helper bersama skrip setup Windows
+├── setup_task.ps1            tugas absen Windows Task Scheduler
 ├── setup_task.bat            klik-dua-kali untuk setup_task.ps1
+├── setup_reminder.ps1        tugas pengingat Windows Task Scheduler
+├── setup_reminder.bat        klik-dua-kali untuk setup_reminder.ps1
 ├── setup_cron.sh             jadwal cron Linux/VPS
 ├── .env.example              contoh berkas .env
 ├── requirements.txt          dependensi Python
