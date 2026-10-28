@@ -8,7 +8,7 @@ import requests
 import app.commands as commands
 import app.utils.net as netmod
 from app.api.client import ApiError
-from app.commands import cmd_dry_run, cmd_status, find_holiday, holiday_service, invalid_days, should_skip, validate_env
+from app.commands import cmd_dry_run, cmd_status, find_holiday, holiday_service, invalid_days, invalid_reminder_times, should_skip, validate_env
 from app.models.attendance import AttendanceService
 from app.models.attendance import DailyLog
 from app.models.holiday import Holiday, HolidayService
@@ -475,6 +475,66 @@ def test_cmd_absen_proceeds_on_workday(monkeypatch, capsys):
     monkeypatch.setattr(commands.settings, "telegram_chat_id", "")
     assert commands.cmd_absen(StubService()) == 0
     assert sent == [date_str(0)]
+
+
+def test_invalid_reminder_times_default(monkeypatch):
+    monkeypatch.setattr(commands.settings, "reminder_times", "16:00,21:00")
+    assert invalid_reminder_times() == []
+
+
+def test_invalid_reminder_times_rejects_bad_values(monkeypatch):
+    monkeypatch.setattr(commands.settings, "reminder_times", "16:00,25:00,abc,21:70")
+    assert invalid_reminder_times() == ["25:00", "abc", "21:70"]
+
+
+def test_cmd_remind_skips_when_already_absent(monkeypatch, capsys):
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+    monkeypatch.setattr(commands, "holiday_service", lambda: None)
+    sent = []
+    monkeypatch.setattr(commands, "log_notify", sent.append)
+    entry = DailyLog({"id": 1, "date": date_str(0)})
+    assert commands.cmd_remind(FakeService({date_str(0): entry})) == 0
+    assert sent == []
+    assert "Sudah absen" in capsys.readouterr().out
+
+
+def test_cmd_remind_notifies_when_missing(monkeypatch, capsys):
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+    monkeypatch.setattr(commands, "holiday_service", lambda: None)
+    sent = []
+    monkeypatch.setattr(commands, "log_notify", sent.append)
+    assert commands.cmd_remind(FakeService({})) == 0
+    assert len(sent) == 1
+    assert "[INGAT]" in sent[0]
+    assert date_str(0) in sent[0]
+
+
+def test_cmd_remind_skips_on_national_holiday(monkeypatch, capsys):
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+
+    class StubService:
+        def get_log(self, date):
+            raise AssertionError("tidak boleh cek absen pada hari libur")
+
+    class HolidayOnToday:
+        def find(self, date):
+            return Holiday(_national_holiday(date, "Maulid Nabi"))
+
+    monkeypatch.setattr(commands, "holiday_service", lambda: HolidayOnToday())
+    assert commands.cmd_remind(StubService()) == 0
+    out = capsys.readouterr().out
+    assert "[SKIP]" in out
+    assert "Maulid Nabi" in out
+
+
+def test_cmd_remind_skips_on_weekend(monkeypatch, capsys):
+    today_name = commands.HARI[now_wib().weekday()]
+    monkeypatch.setattr(commands.settings, "hari_libur", today_name)
+    sent = []
+    monkeypatch.setattr(commands, "log_notify", sent.append)
+    assert commands.cmd_remind(FakeService({})) == 0
+    assert sent == []
+    assert "[SKIP]" in capsys.readouterr().out
 
 
 def test_status_history_marks_holidays(monkeypatch, capsys):

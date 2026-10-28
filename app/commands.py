@@ -14,6 +14,7 @@ from app.utils.time import date_str, now_wib, today_str
 
 HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 TASK_NAME = "AutoAbsenMaganghub"
+REMINDER_TASK_NAME = "AutoAbsenMaganghubReminder"
 
 
 def should_skip() -> bool:
@@ -33,6 +34,23 @@ def invalid_days() -> list[str]:
         name = d.strip()
         if name and name.casefold() not in known:
             bad.append(name)
+    return bad
+
+
+def invalid_reminder_times() -> list[str]:
+    """Return REMINDER_TIMES entries that are not valid HH:MM."""
+    bad = []
+    for raw in settings.reminder_times.split(","):
+        value = raw.strip()
+        if not value:
+            continue
+        parts = value.split(":")
+        valid = len(parts) == 2 and all(p.isdigit() for p in parts)
+        if valid:
+            hour, minute = int(parts[0]), int(parts[1])
+            valid = 0 <= hour <= 23 and 0 <= minute <= 59
+        if not valid:
+            bad.append(value)
     return bad
 
 
@@ -60,6 +78,16 @@ def find_holiday(holidays: HolidayService | None, date: str) -> Holiday | None:
     except Exception as e:
         log(f"[WARN] Gagal membaca daftar libur, absen tetap dilanjutkan: {e}")
         return None
+
+
+def skip_reason() -> str | None:
+    """Return why today is skipped, or None when today is a workday."""
+    if should_skip():
+        return "Hari ini libur"
+    holiday = find_holiday(holiday_service(), today_str())
+    if holiday:
+        return f"{holiday.date} hari libur: {holiday.name}"
+    return None
 
 
 def validate_env():
@@ -91,12 +119,9 @@ def cmd_absen(svc: AttendanceService) -> int:
     if unknown:
         log_notify(f"[FAIL] Nama hari tidak dikenal di HARI_LIBUR: {', '.join(unknown)}")
         return 1
-    if should_skip():
-        log("[SKIP] Hari ini libur, absen dilewati.")
-        return 0
-    holiday = find_holiday(holiday_service(), today_str())
-    if holiday:
-        log(f"[SKIP] {holiday.date} hari libur: {holiday.name}. Absen dilewati.")
+    reason = skip_reason()
+    if reason:
+        log(f"[SKIP] {reason}. Absen dilewati.")
         return 0
     try:
         with_retry("Absen", lambda: svc.clock_in(today_str()))
@@ -107,6 +132,27 @@ def cmd_absen(svc: AttendanceService) -> int:
         log_notify(f"[FAIL] {e}")
         return 1
     log_notify(f"[OK] Absen {today_str()} berhasil terkirim.")
+    return 0
+
+
+@network_guard
+def cmd_remind(svc: AttendanceService) -> int:
+    """Send a Telegram reminder if today's attendance is still missing.
+
+    Returns 0 on success, 1 on failure.
+    """
+    reason = skip_reason()
+    if reason:
+        log(f"[SKIP] {reason}. Pengingat dilewati.")
+        return 0
+    entry = svc.get_log(today_str())
+    if entry:
+        log(f"[OK] Sudah absen pada {today_str()}. Pengingat tidak dikirim.")
+        return 0
+    log_notify(
+        f"[INGAT] Belum absen MagangHub untuk {today_str()} "
+        f"(pukul {now_wib().strftime('%H:%M')} WIB). Segera kirim absen hari ini."
+    )
     return 0
 
 
@@ -172,6 +218,13 @@ def cmd_doctor() -> int:
         log(f"[FAIL] Nama hari tidak dikenal: {', '.join(unknown)}")
         failed += 1
 
+    bad_times = invalid_reminder_times()
+    if not bad_times:
+        log("[OK] Jam pengingat di REMINDER_TIMES valid.")
+    else:
+        log(f"[FAIL] Jam pengingat tidak valid: {', '.join(bad_times)}")
+        failed += 1
+
     try:
         svc = AttendanceService()
         with_retry("Login", svc.login)
@@ -209,6 +262,21 @@ def cmd_doctor() -> int:
         except OSError as e:
             log(f"[FAIL] Cek scheduler gagal: {e}")
             failed += 1
+
+        if settings.reminder_times.strip() and not invalid_reminder_times():
+            try:
+                r = subprocess.run(
+                    ["schtasks", "/query", "/tn", REMINDER_TASK_NAME],
+                    capture_output=True,
+                )
+                if r.returncode == 0:
+                    log("[OK] Tugas pengingat terdaftar.")
+                else:
+                    log(f"[FAIL] Tugas pengingat '{REMINDER_TASK_NAME}' tidak ditemukan.")
+                    failed += 1
+            except OSError as e:
+                log(f"[FAIL] Cek tugas pengingat gagal: {e}")
+                failed += 1
     else:
         log("[SKIP] Cek scheduler hanya di Windows.")
 
