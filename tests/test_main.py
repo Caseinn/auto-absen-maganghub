@@ -462,6 +462,9 @@ def test_cmd_absen_proceeds_on_workday(monkeypatch, capsys):
     sent = []
 
     class StubService:
+        def get_log(self, date):
+            return None
+
         def clock_in(self, date):
             sent.append(date)
             return {"ok": True}
@@ -535,6 +538,24 @@ def test_cmd_remind_skips_on_weekend(monkeypatch, capsys):
     assert commands.cmd_remind(FakeService({})) == 0
     assert sent == []
     assert "[SKIP]" in capsys.readouterr().out
+
+
+def test_cmd_absen_skips_when_already_absent(monkeypatch, capsys):
+    _fill_env(monkeypatch)
+    monkeypatch.setattr(commands.settings, "hari_libur", "")
+    monkeypatch.setattr(commands, "holiday_service", lambda: None)
+    sent = []
+    monkeypatch.setattr(commands, "log_notify", sent.append)
+
+    class StubService:
+        def get_log(self, date):
+            return DailyLog({"id": 1, "date": date})
+
+        def clock_in(self, date):
+            raise AssertionError("tidak boleh kirim absen ulang")
+
+    assert commands.cmd_absen(StubService()) == 0
+    assert sent == ["[OK] Sudah absen hari ini."]
 
 
 def test_status_history_marks_holidays(monkeypatch, capsys):

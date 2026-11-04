@@ -90,6 +90,11 @@ def skip_reason() -> str | None:
     return None
 
 
+def already_absent(svc: AttendanceService) -> bool:
+    """Return True if today's attendance is already recorded."""
+    return svc.get_log(today_str()) is not None
+
+
 def validate_env():
     """Return True if required env vars are set, else log error."""
     missing = []
@@ -123,6 +128,9 @@ def cmd_absen(svc: AttendanceService) -> int:
     if reason:
         log(f"[SKIP] {reason}. Absen dilewati.")
         return 0
+    if already_absent(svc):
+        log_notify("[OK] Sudah absen hari ini.")
+        return 0
     try:
         with_retry("Absen", lambda: svc.clock_in(today_str()))
     except Exception as e:
@@ -145,8 +153,7 @@ def cmd_remind(svc: AttendanceService) -> int:
     if reason:
         log(f"[SKIP] {reason}. Pengingat dilewati.")
         return 0
-    entry = svc.get_log(today_str())
-    if entry:
+    if already_absent(svc):
         log(f"[OK] Sudah absen pada {today_str()}. Pengingat tidak dikirim.")
         return 0
     log_notify(
